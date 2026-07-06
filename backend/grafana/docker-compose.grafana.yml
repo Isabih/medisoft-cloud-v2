@@ -1,0 +1,44 @@
+version: "3.8"
+
+# Grafana + Prometheus stack for Medisoft Cloud monitoring.
+#
+# Usage:
+#   docker compose -f docker-compose.grafana.yml up -d
+#   open http://localhost:3000   (admin / admin on first login)
+#
+# Make sure your FastAPI backend is reachable from these containers
+# (host.docker.internal on Mac/Windows, or use the host network on Linux).
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: medisoft-prom
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: medisoft-grafana
+    environment:
+      # Allow embedding via iframe (the /grafana page in the React app)
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_COOKIE_SAMESITE=none
+      - GF_USERS_DEFAULT_THEME=dark
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prom_data:
+  grafana_data:

@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  :root {
+    --background: 200 20% 95%;
+    --foreground: 200 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 30% 10%;
+
+    --primary: 180 70% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 200 25% 90%;
+    --secondary-foreground: 200 30% 15%;
+
+    --muted: 200 15% 92%;
+    --muted-foreground: 200 10% 45%;
+
+    --accent: 180 60% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 15% 88%;
+    --input: 200 15% 88%;
+    --ring: 180 70% 40%;
+
+    --radius: 0.75rem;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 195 80% 15%;
+    --sidebar-foreground: 180 20% 90%;
+    --sidebar-primary: 180 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 195 60% 22%;
+    --sidebar-accent-foreground: 180 20% 95%;
+    --sidebar-border: 195 50% 25%;
+    --sidebar-ring: 180 70% 50%;
+
+    --chart-1: 180 70% 40%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 72% 51%;
+    --chart-5: 217 91% 60%;
+  }
+
+  .dark {
+    --background: 200 25% 8%;
+    --foreground: 180 15% 92%;
+
+    --card: 200 25% 12%;
+    --card-foreground: 180 15% 92%;
+
+    --popover: 200 25% 12%;
+    --popover-foreground: 180 15% 92%;
+
+    --primary: 180 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 200 20% 18%;
+    --secondary-foreground: 180 15% 85%;
+
+    --muted: 200 20% 16%;
+    --muted-foreground: 200 10% 55%;
+
+    --accent: 180 60% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 20% 20%;
+    --input: 200 20% 20%;
+    --ring: 180 70% 45%;
+
+    --sidebar-background: 200 30% 7%;
+    --sidebar-foreground: 180 20% 85%;
+    --sidebar-primary: 180 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 25% 14%;
+    --sidebar-accent-foreground: 180 20% 90%;
+    --sidebar-border: 200 25% 15%;
+    --sidebar-ring: 180 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(180 70% 40%), hsl(195 80% 35%));
+  }
+  .gradient-sidebar {
+    background: linear-gradient(180deg, hsl(195 80% 12%), hsl(200 70% 8%));
+  }
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(180 70% 35%), hsl(200 60% 25%));
+  }
+  .status-green {
+    color: hsl(142 71% 45%);
+  }
+  .status-yellow {
+    color: hsl(38 92% 50%);
+  }
+  .status-red {
+    color: hsl(0 72% 51%);
+  }
+  .bg-status-green {
+    background-color: hsl(142 71% 45%);
+  }
+  .bg-status-yellow {
+    background-color: hsl(38 92% 50%);
+  }
+  .bg-status-red {
+    background-color: hsl(0 72% 51%);
+  }
+
+  /* Polish utilities */
+  .page-enter {
+    animation: fade-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .card-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -12px hsl(var(--primary) / 0.25);
+    border-color: hsl(var(--primary) / 0.4);
+  }
+  .glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.06), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+}

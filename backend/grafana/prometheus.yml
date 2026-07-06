@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: medisoft-backend
+    metrics_path: /metrics
+    static_configs:
+      # On Linux, replace host.docker.internal with the host IP or use:
+      #   docker compose ... --network host  (then localhost:8000)
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: medisoft-api

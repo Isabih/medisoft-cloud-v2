@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+backend/.env
+backend/venv/
+backend/__pycache__/
+backend/app/__pycache__/
+*.pyc
+.DS_Store
+*.log
+medisoft_guardian_local.db
