@@ -20,6 +20,7 @@ from app.models.hybrid_monitoring import SourceAgentReport, CloudReplicaReport, 
 from app.models.guardian import ReplicationGuardianEvent, LocalStatusReport, ReplicaEmergencyState
 
 import app.routers.auth as auth
+import app.routers.dashboard_compat_v4 as dashboard_compat_v4
 import app.routers.dashboard as dashboard
 import app.routers.alerts as alerts
 import app.routers.health_centers as health_centers
@@ -82,6 +83,7 @@ def api_health():
 
 
 app.include_router(auth.router, prefix=settings.api_v1_prefix)
+app.include_router(dashboard_compat_v4.router, prefix=settings.api_v1_prefix)
 app.include_router(dashboard.router, prefix=settings.api_v1_prefix)
 app.include_router(alerts.router, prefix=settings.api_v1_prefix)
 app.include_router(health_centers.router, prefix=settings.api_v1_prefix)
