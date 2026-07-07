@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     secret_key: str
     api_v1_prefix: str = "/api/v1"
     backend_host: str = "127.0.0.1"
-    backend_port: int = 8000
+    backend_port: int = 8004
     cors_origins: List[str] = [
         "http://localhost:8080",
         "http://127.0.0.1:8080",

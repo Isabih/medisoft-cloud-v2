@@ -7,7 +7,7 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       # On Linux, replace host.docker.internal with the host IP or use:
-      #   docker compose ... --network host  (then localhost:8000)
-      - targets: ["host.docker.internal:8000"]
+      #   docker compose ... --network host  (then localhost:8004)
+      - targets: ["host.docker.internal:8004"]
         labels:
           service: medisoft-api
