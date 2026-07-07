@@ -230,7 +230,12 @@ def fetch_replication_config(db: Session, database_name: str, health_center_name
 
 @router.get("")
 def list_health_centers(db: Session = Depends(get_db)):
-    rows = db.execute(text("""
+    """Return registered health centers merged with the latest live Monitoring v4 data.
+
+    This keeps the old /health-centers endpoint compatible with the frontend while
+    using the same live source of truth as /dashboard/centers-live.
+    """
+    centers = db.execute(text("""
         SELECT
             hc.id,
             hc.name,
@@ -246,81 +251,161 @@ def list_health_centers(db: Session = Depends(get_db)):
             hc.mysql_status,
             hc.cloud_connection,
             hc.last_seen,
+            hc.last_data_timestamp,
+            hc.data_size_mb,
+            hc.risk_score,
+            hc.success_rate,
+            hc.avg_rows_per_sync,
+            hc.avg_data_size_mb,
             hc.cpu_usage,
             hc.ram_usage,
             hc.disk_usage,
-            (
-                SELECT CASE WHEN rs.io_running IN ('Yes','ON') THEN TRUE ELSE FALSE END
-                FROM replication_status rs
-                WHERE rs.center_id = hc.id
-                ORDER BY rs.checked_at DESC
-                LIMIT 1
-            ) AS replication_io_running,
-            (
-                SELECT CASE WHEN rs.sql_running IN ('Yes','ON') THEN TRUE ELSE FALSE END
-                FROM replication_status rs
-                WHERE rs.center_id = hc.id
-                ORDER BY rs.checked_at DESC
-                LIMIT 1
-            ) AS replication_sql_running,
-            (
-                SELECT rs.seconds_behind
-                FROM replication_status rs
-                WHERE rs.center_id = hc.id
-                ORDER BY rs.checked_at DESC
-                LIMIT 1
-            ) AS replication_lag_seconds,
-            (
-                SELECT b.status
-                FROM backups b
-                WHERE b.center_id = hc.id
-                ORDER BY b.created_at DESC
-                LIMIT 1
-            ) AS backup_status,
-            (
-                SELECT COALESCE(md.drift_detected, 0)
-                FROM monitored_databases md
-                WHERE md.health_center_id = hc.id
-                ORDER BY md.last_checked DESC
-                LIMIT 1
-            ) AS drift_detected,
-            (
-                SELECT COUNT(*)
-                FROM alerts a
-                WHERE a.center_id = hc.id AND a.resolved_at IS NULL
-            ) AS unresolved_alerts,
-            (
-                SELECT l.compare_status
-                FROM local_status_reports l
-                WHERE l.center_id = hc.id
-                ORDER BY l.reported_at DESC
-                LIMIT 1
-            ) AS compare_status,
-            (
-                SELECT l.local_latest_time
-                FROM local_status_reports l
-                WHERE l.center_id = hc.id
-                ORDER BY l.reported_at DESC
-                LIMIT 1
-            ) AS latest_data_time,
-            (
-                SELECT CASE WHEN re.is_active = 1 THEN TRUE ELSE FALSE END
-                FROM replica_emergency_states re
-                WHERE re.channel_name = hc.replication_channel
-                LIMIT 1
-            ) AS emergency,
-            (
-                SELECT rge.status
-                FROM replication_guardian_events rge
-                WHERE rge.channel_name = hc.replication_channel
-                ORDER BY rge.created_at DESC
-                LIMIT 1
-            ) AS guardian_status
+            hc.anydesk_id,
+            hc.rustdesk_id,
+            hc.phone_number_1,
+            hc.phone_contact_1,
+            hc.phone_role_1,
+            hc.phone_number_2,
+            hc.phone_contact_2,
+            hc.phone_role_2,
+            hc.expected_sync_interval,
+            hc.latitude,
+            hc.longitude,
+            hc.agent_version,
+            hc.health_score,
+            hc.created_at
         FROM health_centers hc
         ORDER BY hc.name
     """)).mappings().all()
 
-    return [dict(r) for r in rows]
+    results = []
+
+    for center in centers:
+        c = dict(center)
+        foss_id = c.get("foss_id")
+
+        local = None
+        cloud = None
+        integrity = None
+
+        if foss_id:
+            local = db.execute(text("""
+                SELECT *
+                FROM source_agent_reports
+                WHERE foss_id = :foss_id
+                ORDER BY id DESC
+                LIMIT 1
+            """), {"foss_id": foss_id}).mappings().first()
+
+            cloud = db.execute(text("""
+                SELECT *
+                FROM cloud_replica_reports
+                WHERE foss_id = :foss_id
+                ORDER BY id DESC
+                LIMIT 1
+            """), {"foss_id": foss_id}).mappings().first()
+
+            integrity = db.execute(text("""
+                SELECT *
+                FROM database_integrity_snapshots
+                WHERE foss_id = :foss_id
+                ORDER BY id DESC
+                LIMIT 1
+            """), {"foss_id": foss_id}).mappings().first()
+
+        local = dict(local) if local else {}
+        cloud = dict(cloud) if cloud else {}
+        integrity = dict(integrity) if integrity else {}
+
+        # Prefer live agent values, then cloud/integrity values, then registered fallback.
+        c["status"] = c.get("status") or "offline"
+        c["internet_status"] = local.get("internet_status") or c.get("internet_status") or "offline"
+        c["mysql_status"] = local.get("mysql_status") or c.get("mysql_status") or "offline"
+        c["cloud_connection"] = local.get("cloud_connection") or c.get("cloud_connection") or "failed"
+
+        live_seen = local.get("created_at") or local.get("sent_at")
+        c["last_seen"] = live_seen or c.get("last_seen")
+        c["last_sync"] = cloud.get("checked_at") or cloud.get("collected_at") or live_seen or c.get("last_seen")
+        c["last_updated"] = c["last_sync"]
+        c["agent_last_report"] = live_seen
+
+        c["cpu_usage"] = local.get("cpu_usage", c.get("cpu_usage"))
+        c["ram_usage"] = local.get("ram_usage", c.get("ram_usage"))
+        c["disk_usage"] = local.get("disk_usage", c.get("disk_usage"))
+        c["agent_version"] = local.get("agent_version") or c.get("agent_version")
+
+        local_size = local.get("local_size_mb") or local.get("database_size_mb")
+        cloud_size = cloud.get("cloud_database_size_mb")
+        c["data_size_mb"] = local_size or cloud_size or c.get("data_size_mb")
+        c["db_size_mb"] = c.get("data_size_mb")
+        c["local_size_mb"] = local_size
+        c["cloud_size_mb"] = cloud_size
+        c["local_table_count"] = local.get("local_table_count")
+        c["cloud_table_count"] = cloud.get("cloud_table_count")
+        c["local_rows_count"] = local.get("local_rows_count")
+        c["cloud_rows_count"] = cloud.get("cloud_rows_count")
+        c["rows_difference"] = integrity.get("rows_difference")
+        c["size_difference_mb"] = integrity.get("size_difference_mb")
+        c["integrity_status"] = integrity.get("status")
+        c["integrity_summary"] = integrity.get("summary")
+        c["data_health_score"] = 70 if integrity.get("status") == "minor_drift" else (100 if integrity.get("status") in ("healthy", "ok", "synced") else None)
+
+        c["head_of_hc"] = c.get("phone_contact_1") or "Head of HC"
+        c["head_phone"] = c.get("phone_number_1")
+
+        replica_io = cloud.get("io_running") or local.get("io_running")
+        replica_sql = cloud.get("sql_running") or local.get("sql_running")
+        seconds_behind = cloud.get("seconds_behind") if cloud.get("seconds_behind") is not None else local.get("seconds_behind")
+
+        c["replica_io"] = replica_io
+        c["replica_sql"] = replica_sql
+        c["seconds_behind"] = seconds_behind
+        c["replication_io_running"] = str(replica_io or "").lower() in {"yes", "on", "true", "1"}
+        c["replication_sql_running"] = str(replica_sql or "").lower() in {"yes", "on", "true", "1"}
+        c["replication_lag_seconds"] = seconds_behind
+        c["replication"] = {
+            "channel_name": cloud.get("channel_name") or local.get("channel_name") or c.get("replication_channel"),
+            "source_host": cloud.get("source_host") or c.get("source_host"),
+            "io_running": "Yes" if c["replication_io_running"] else (replica_io or "No"),
+            "sql_running": "Yes" if c["replication_sql_running"] else (replica_sql or "No"),
+            "seconds_behind": seconds_behind,
+            "last_io_error": cloud.get("last_io_error") or local.get("last_io_error") or "",
+            "last_sql_error": cloud.get("last_sql_error") or local.get("last_sql_error") or "",
+            "checked_at": cloud.get("checked_at") or cloud.get("collected_at") or local.get("created_at"),
+        }
+
+        backup = db.execute(text("""
+            SELECT status, backup_date, file_size_mb, duration_seconds, created_at
+            FROM backups
+            WHERE center_id = :center_id
+            ORDER BY created_at DESC
+            LIMIT 1
+        """), {"center_id": c.get("id")}).mappings().first()
+        backup = dict(backup) if backup else None
+        c["last_backup"] = backup
+        c["backup_status"] = backup.get("status") if backup else None
+
+        unresolved = db.execute(text("""
+            SELECT COUNT(*)
+            FROM alerts
+            WHERE center_id = :center_id AND resolved_at IS NULL
+        """), {"center_id": c.get("id")}).scalar()
+        c["unresolved_alerts"] = int(unresolved or 0)
+
+        # Derive overall status from live checks.
+        if c["mysql_status"] == "online" and c["internet_status"] == "online" and c["replication_io_running"] and c["replication_sql_running"]:
+            c["status"] = "online"
+            c["health_score"] = c.get("health_score") or 95
+        elif c["mysql_status"] == "online" or c["internet_status"] == "online" or c["replication_io_running"] or c["replication_sql_running"]:
+            c["status"] = "partial"
+            c["health_score"] = c.get("health_score") or 70
+        else:
+            c["status"] = "offline"
+            c["health_score"] = c.get("health_score") or 0
+
+        results.append(c)
+
+    return results
 
 
 @router.get("/{center_id}")
