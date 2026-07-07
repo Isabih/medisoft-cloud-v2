@@ -47,9 +47,11 @@ import app.routers.database_integrity as database_integrity
 import app.routers.local_server_commands as local_server_commands
 import app.routers.cloud_admin_commands as cloud_admin_commands
 import app.routers.retention as retention
+import app.routers.monitoring_v4 as monitoring_v4
 
 from app.services.alert_engine import start_alert_engine
 from app.services.retention_service import start_retention_scheduler
+from app.services.monitoring_v4 import start_monitoring_v4
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,7 @@ app.include_router(cloud_admin_commands.router, prefix=settings.api_v1_prefix)
 app.include_router(retention.router, prefix=settings.api_v1_prefix)
 app.include_router(metrics_prometheus.router)
 app.include_router(sms_logs.router, prefix=settings.api_v1_prefix)
+app.include_router(monitoring_v4.router, prefix=settings.api_v1_prefix)
 
 
 @app.on_event("startup")
@@ -122,4 +125,8 @@ def _start_background():
         start_retention_scheduler()
     except Exception as exc:
         logger.warning("retention scheduler could not start: %s", exc)
+    try:
+        start_monitoring_v4()
+    except Exception as exc:
+        logger.warning("monitoring v4 scheduler could not start: %s", exc)
  

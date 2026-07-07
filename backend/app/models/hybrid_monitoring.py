@@ -20,6 +20,13 @@ class SourceAgentReport(Base):
     ram_usage = Column(Float, nullable=False, default=0)
     disk_usage = Column(Float, nullable=False, default=0)
 
+    database_size_mb = Column(Float, nullable=False, default=0)
+    local_size_mb = Column(Float, nullable=False, default=0)
+    local_table_count = Column(Integer, nullable=False, default=0)
+    local_rows_count = Column(Integer, nullable=False, default=0)
+    local_latest_time = Column(DateTime, nullable=True)
+    agent_version = Column(String(50), nullable=True)
+
     source_config_ok = Column(Boolean, nullable=False, default=False)
     connected_replicas = Column(Integer, nullable=False, default=0)
     replica_hosts_json = Column(Text, nullable=True)
@@ -51,6 +58,19 @@ class CloudReplicaReport(Base):
 
     last_io_error = Column(Text, nullable=True)
     last_sql_error = Column(Text, nullable=True)
+
+    health_center_id = Column(String(36), nullable=True)
+    health_center_name = Column(String(255), nullable=True)
+    cloud_database_size_mb = Column(Float, nullable=False, default=0)
+    cloud_table_count = Column(Integer, nullable=False, default=0)
+    cloud_rows_count = Column(Integer, nullable=False, default=0)
+    cloud_latest_time = Column(DateTime, nullable=True)
+    source_log_file = Column(String(255), nullable=True)
+    read_source_log_pos = Column(Integer, nullable=True)
+    relay_log_file = Column(String(255), nullable=True)
+    relay_log_pos = Column(Integer, nullable=True)
+    raw_json = Column(Text, nullable=True)
+    collected_at = Column(DateTime, nullable=True)
 
     checked_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

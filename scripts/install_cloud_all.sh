@@ -17,7 +17,7 @@ DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-root}"
 SERVER_NAME="${SERVER_NAME:-_}"
 ADMIN_USER="${ADMIN_USER:-admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Medisoft@12345}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-raymond1}"
 
 log(){ printf "\033[1;36m[guardian]\033[0m %s\n" "$*"; }
 fail(){ printf "\033[1;31m[guardian]\033[0m %s\n" "$*" >&2; exit 1; }

@@ -1,10 +1,11 @@
 import json
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.core.database import SessionLocal
 from app.core.hybrid_ai import analyze_hybrid
@@ -38,6 +39,13 @@ class SourceAgentReportIn(BaseModel):
     cpu_usage: float
     ram_usage: float
     disk_usage: float
+    database_size_mb: float = 0
+    local_size_mb: Optional[float] = None
+    local_table_count: int = 0
+    local_rows_count: Optional[int] = None
+    local_row_count: Optional[int] = None
+    local_latest_time: Optional[datetime] = None
+    agent_version: Optional[str] = None
 
     source_config_ok: bool = False
     connected_replicas: int = 0
@@ -119,6 +127,12 @@ def receive_source_report(payload: SourceAgentReportIn, db: Session = Depends(ge
         cpu_usage=payload.cpu_usage,
         ram_usage=payload.ram_usage,
         disk_usage=payload.disk_usage,
+        database_size_mb=payload.database_size_mb or 0,
+        local_size_mb=payload.local_size_mb if payload.local_size_mb is not None else (payload.database_size_mb or 0),
+        local_table_count=payload.local_table_count or 0,
+        local_rows_count=(payload.local_rows_count if payload.local_rows_count is not None else (payload.local_row_count or 0)),
+        local_latest_time=payload.local_latest_time,
+        agent_version=payload.agent_version,
 
         source_config_ok=payload.source_config_ok,
         connected_replicas=payload.connected_replicas,
@@ -138,6 +152,25 @@ def receive_source_report(payload: SourceAgentReportIn, db: Session = Depends(ge
     db.refresh(report)
 
     diagnosis = create_diagnosis(db, payload.foss_id)
+
+    # Keep registered health center live even before the background cloud collector runs.
+    try:
+        local_rows = payload.local_rows_count if payload.local_rows_count is not None else (payload.local_row_count or 0)
+        local_size = payload.local_size_mb if payload.local_size_mb is not None else (payload.database_size_mb or 0)
+        db.execute(text("""
+            UPDATE health_centers SET
+              mysql_status=:mysql, internet_status=:internet, cloud_connection=:cloud,
+              last_seen=NOW(), data_size_mb=:size, cpu_usage=:cpu, ram_usage=:ram, disk_usage=:disk,
+              agent_version=:agent_version
+            WHERE foss_id=:foss_id
+        """), {
+            "mysql": payload.mysql_status, "internet": payload.internet_status, "cloud": payload.cloud_connection,
+            "size": local_size, "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage,
+            "agent_version": payload.agent_version or "local-agent", "foss_id": payload.foss_id,
+        })
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {
         "status": "ok",
@@ -170,6 +203,25 @@ def receive_cloud_report(payload: CloudReplicaReportIn, db: Session = Depends(ge
     db.refresh(report)
 
     diagnosis = create_diagnosis(db, payload.foss_id)
+
+    # Keep registered health center live even before the background cloud collector runs.
+    try:
+        local_rows = payload.local_rows_count if payload.local_rows_count is not None else (payload.local_row_count or 0)
+        local_size = payload.local_size_mb if payload.local_size_mb is not None else (payload.database_size_mb or 0)
+        db.execute(text("""
+            UPDATE health_centers SET
+              mysql_status=:mysql, internet_status=:internet, cloud_connection=:cloud,
+              last_seen=NOW(), data_size_mb=:size, cpu_usage=:cpu, ram_usage=:ram, disk_usage=:disk,
+              agent_version=:agent_version
+            WHERE foss_id=:foss_id
+        """), {
+            "mysql": payload.mysql_status, "internet": payload.internet_status, "cloud": payload.cloud_connection,
+            "size": local_size, "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage,
+            "agent_version": payload.agent_version or "local-agent", "foss_id": payload.foss_id,
+        })
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {
         "status": "ok",
