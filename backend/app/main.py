@@ -21,11 +21,13 @@ from app.models.guardian import ReplicationGuardianEvent, LocalStatusReport, Rep
 
 import app.routers.auth as auth
 import app.routers.dashboard_compat_v4 as dashboard_compat_v4
+import app.routers.dashboard_live_final_v4 as dashboard_live_final_v4
 import app.routers.dashboard as dashboard
 import app.routers.alerts as alerts
 import app.routers.health_centers as health_centers
 import app.routers.monitored_databases as monitored_databases
 import app.routers.backups as backups
+import app.routers.reports_live_v4_override as reports_live_v4_override
 import app.routers.reports as reports
 import app.routers.settings as settings_router
 import app.routers.sync as sync
@@ -84,11 +86,13 @@ def api_health():
 
 app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(dashboard_compat_v4.router, prefix=settings.api_v1_prefix)
+app.include_router(dashboard_live_final_v4.router, prefix=settings.api_v1_prefix)
 app.include_router(dashboard.router, prefix=settings.api_v1_prefix)
 app.include_router(alerts.router, prefix=settings.api_v1_prefix)
 app.include_router(health_centers.router, prefix=settings.api_v1_prefix)
 app.include_router(monitored_databases.router, prefix=settings.api_v1_prefix)
 app.include_router(backups.router, prefix=settings.api_v1_prefix)
+app.include_router(reports_live_v4_override.router, prefix=settings.api_v1_prefix)
 app.include_router(reports.router, prefix=settings.api_v1_prefix)
 app.include_router(settings_router.router, prefix=settings.api_v1_prefix)
 app.include_router(sync.router, prefix=settings.api_v1_prefix)

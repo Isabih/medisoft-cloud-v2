@@ -176,7 +176,7 @@ const MonitoringPage = () => {
     queryKey: ["health-centers"],
     queryFn: async () => (await fetchHealthCenters()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const selectedCenter = useMemo(
@@ -192,7 +192,7 @@ const MonitoringPage = () => {
     queryFn: async () => (await fetchHealthCenter(selectedCenterId)).data,
     enabled: !!selectedCenterId,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 15000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -203,7 +203,7 @@ const MonitoringPage = () => {
     queryFn: async () => (await fetchDriftReport(selectedCenterId)).data,
     enabled: !!selectedCenterId,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -214,7 +214,7 @@ const MonitoringPage = () => {
     queryFn: async () => (await fetchReplicationHistory(selectedCenterId)).data,
     enabled: !!selectedCenterId,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -225,7 +225,7 @@ const MonitoringPage = () => {
     queryFn: async () => (await fetchMetricsHistory(selectedCenterId)).data,
     enabled: !!selectedCenterId,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -236,7 +236,7 @@ const MonitoringPage = () => {
     queryFn: async () => (await fetchCenterTimeline(selectedCenterId)).data,
     enabled: !!selectedCenterId,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const filteredCenters = useMemo(() => {
@@ -566,7 +566,7 @@ const MonitoringPage = () => {
 
                       <div className="grid grid-cols-2 gap-3 border-t pt-3 md:grid-cols-4">
                         <div>
-                          <p className="text-xs text-muted-foreground">Cloud Connection</p>
+                          <p className="text-xs text-muted-foreground">Backend Connection</p>
                           <p
                             className={cn(
                               "mt-1 text-sm font-semibold",

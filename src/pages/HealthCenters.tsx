@@ -105,7 +105,7 @@ const HealthCentersPage = () => {
     queryKey: ["health-centers"],
     queryFn: async () => (await fetchHealthCenters()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const districts =

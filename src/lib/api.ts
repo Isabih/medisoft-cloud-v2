@@ -376,8 +376,14 @@ export const aiDiagnose = (centerId: string, context?: Record<string, unknown>) 
 SMS LOGS
 ============================================================
 */
-export const fetchSmsLogs = (params?: { from?: string; to?: string; center_id?: string }) =>
-  api.get("/sms/logs", { params });
+export const fetchSmsLogs = async (params?: { from?: string; to?: string; center_id?: string }) => {
+  const res = await api.get("/sms/logs", { params });
+  const data = res.data;
+  return {
+    ...res,
+    data: Array.isArray(data) ? data : (data?.logs || []),
+  };
+};
 
 export const resendSms = (id: string) => api.post(`/sms/${id}/resend`);
 

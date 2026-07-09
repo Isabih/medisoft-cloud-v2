@@ -254,7 +254,7 @@ const DashboardPage = () => {
     queryKey: ["centers-live"],
     queryFn: async () => (await fetchCentersLive()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -264,7 +264,7 @@ const DashboardPage = () => {
     queryKey: ["dashboard-kpis"],
     queryFn: async () => (await fetchDashboardKPIs()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -274,7 +274,7 @@ const DashboardPage = () => {
     queryKey: ["alerts-active"],
     queryFn: async () => (await fetchActiveAlerts()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const {
@@ -283,7 +283,7 @@ const DashboardPage = () => {
     queryKey: ["cloud-status"],
     queryFn: async () => (await fetchCloudStatus()).data,
     ...LIVE_QUERY_OPTIONS,
-    refetchInterval: 30000,
+    refetchInterval: 5000,
   });
 
   const toggleSort = (key: SortKey) => {

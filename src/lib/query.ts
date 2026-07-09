@@ -7,7 +7,7 @@ export const LIVE_QUERY_OPTIONS = {
   refetchOnWindowFocus: false,
   refetchOnReconnect: true,
   refetchOnMount: false,
-  refetchIntervalInBackground: false,
+  refetchIntervalInBackground: true,
   placeholderData: <T,>(previousData: T) => previousData,
 } as const;
 
