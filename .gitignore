@@ -51,4 +51,10 @@ Thumbs.db
 # Database / Temp
 # =========================
 *.sqlite
-*.db
+*.db*.bak
+*.bak_*
+*.bak-*
+*_backup_*
+backend/venv/
+node_modules/
+dist/

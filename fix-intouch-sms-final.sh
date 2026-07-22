@@ -1,3 +1,70 @@
+#!/usr/bin/env bash
+set -e
+
+APP="/opt/medisoft-guardian-v3"
+BACKEND="$APP/backend"
+
+echo "=== Fix InTouch SMS Final ==="
+read -s -p "Enter MySQL root password: " MYSQL_ROOT_PASSWORD
+echo
+
+echo "=== Backup sms_service.py ==="
+cp "$BACKEND/app/services/sms_service.py" "$BACKEND/app/services/sms_service.py.bak_$(date +%F_%H%M%S)"
+
+echo "=== Fix sms_logs schema safely ==="
+mysql -u root -p"$MYSQL_ROOT_PASSWORD" medisoft_guardian <<'SQL'
+SET @db='medisoft_guardian';
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='sender'),
+  'ALTER TABLE sms_logs ADD COLUMN sender VARCHAR(100) NULL',
+  'SELECT "sender exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='recipient_role'),
+  'ALTER TABLE sms_logs ADD COLUMN recipient_role VARCHAR(50) NULL',
+  'SELECT "recipient_role exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='center_id'),
+  'ALTER TABLE sms_logs ADD COLUMN center_id VARCHAR(36) NULL',
+  'SELECT "center_id exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='center_name'),
+  'ALTER TABLE sms_logs ADD COLUMN center_name VARCHAR(255) NULL',
+  'SELECT "center_name exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='provider_message_id'),
+  'ALTER TABLE sms_logs ADD COLUMN provider_message_id VARCHAR(255) NULL',
+  'SELECT "provider_message_id exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='sms_logs' AND column_name='error'),
+  'ALTER TABLE sms_logs ADD COLUMN error TEXT NULL',
+  'SELECT "error exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=@db AND table_name='settings' AND column_name='sms_timeout_seconds'),
+  'ALTER TABLE settings ADD COLUMN sms_timeout_seconds INT NOT NULL DEFAULT 30',
+  'SELECT "sms_timeout_seconds exists"'
+); PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+UPDATE settings
+SET sms_api_url='https://www.intouchsms.co.rw/api/sendsms/.json',
+    sms_timeout_seconds=30
+WHERE id=1;
+SQL
+
+echo "=== Replace sms_service.py with correct InTouch Basic Auth/form-data version ==="
+cat > "$BACKEND/app/services/sms_service.py" <<'PY'
 """
 Medisoft Guardian SMS Service
 Provider: InTouch SMS Rwanda
@@ -19,19 +86,6 @@ from sqlalchemy.orm import Session
 
 DEFAULT_API_URL = "https://www.intouchsms.co.rw/api/sendsms/.json"
 
-
-def _load_config(db: Session) -> Dict[str, Any]:
-    """
-    Backward compatibility for older modules.
-    """
-    cfg = _settings(db)
-
-    # Legacy aliases
-    cfg["username"] = cfg.get("sms_username")
-    cfg["password"] = cfg.get("sms_password")
-    cfg["admin_numbers"] = cfg.get("admin_phone_numbers")
-
-    return cfg
 
 def _settings(db: Session) -> Dict[str, Any]:
     row = db.execute(text("SELECT * FROM settings WHERE id=1 LIMIT 1")).mappings().first()
@@ -217,3 +271,29 @@ def send_test_sms(db: Session, to: str) -> Dict[str, Any]:
         center_id=None,
         center_name="Settings Test",
     )
+PY
+
+echo "=== Restart backend ==="
+sudo systemctl restart medisoft-guardian-v4-backend
+sleep 3
+
+echo "=== Test settings ==="
+curl -s http://127.0.0.1:8004/api/v1/settings | jq '.sms_api_url, .sms_username, .sms_sender_id, .sms_timeout_seconds'
+
+echo "=== Test SMS directly ==="
+read -p "Enter phone number to test SMS: " TEST_PHONE
+
+curl -s -X POST http://127.0.0.1:8004/api/v1/settings/sms/test \
+  -H "Content-Type: application/json" \
+  -d "{\"to\":\"$TEST_PHONE\"}" | jq
+
+echo "=== Latest SMS log ==="
+mysql -u root -p"$MYSQL_ROOT_PASSWORD" medisoft_guardian -e "
+SELECT to_number, sender, recipient_role, status, provider_message_id, error, sent_at
+FROM sms_logs
+ORDER BY sent_at DESC
+LIMIT 3\G
+"
+
+echo "DONE ✅"
+echo "If you see account balance / credits error, integration is correct and only SMS credits are missing."

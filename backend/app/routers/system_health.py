@@ -57,20 +57,46 @@ def _check_websocket(request: Request) -> Dict[str, Any]:
 def _check_sms(db: Session) -> Dict[str, Any]:
     try:
         from app.services.sms_service import _load_config  # type: ignore
+
         cfg = _load_config(db)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
-    has_user = bool(cfg.get("username"))
-    has_pass = bool(cfg.get("password"))
-    admins = [p for p in str(cfg.get("admin_numbers") or "").split(",") if p.strip()]
+
+    raw_recipients = str(
+        cfg.get("admin_phone_numbers") or ""
+    )
+
+    admins = [
+        number.strip()
+        for number in raw_recipients.replace(";", ",").split(",")
+        if number.strip()
+    ]
+
+    has_user = bool(
+        str(cfg.get("sms_username") or "").strip()
+    )
+
+    has_pass = bool(
+        str(cfg.get("sms_password") or "").strip()
+    )
+
+    sms_enabled = bool(
+        int(cfg.get("sms_enabled") or 0)
+    )
+
     return {
-        "ok": has_user and has_pass,
-        "provider": cfg.get("provider") or "intouch",
+        "ok": (
+            sms_enabled
+            and has_user
+            and has_pass
+            and len(admins) > 0
+        ),
+        "provider": "intouch",
+        "enabled": sms_enabled,
         "username_set": has_user,
         "password_set": has_pass,
         "admin_recipients": len(admins),
     }
-
 
 @router.get("/health-check")
 def system_health_check(request: Request, db: Session = Depends(get_db)) -> Dict[str, Any]:

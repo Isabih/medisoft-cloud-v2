@@ -81,23 +81,55 @@ const SettingsPage = () => {
     }
   };
 
-  const handleTestSms = async () => {
-    if (!testTo) {
-      toast.error("Enter a phone number to test (e.g. 25078...)");
+const handleTestSms = async () => {
+  if (!testTo) {
+    toast.error("Enter a phone number to test (e.g. 250788592987)");
+    return;
+  }
+
+  setTesting(true);
+
+  try {
+    const res = await sendTestSms(testTo);
+
+    const data = res.data || {};
+
+    if (data.success === true) {
+      toast.success(`Test SMS sent successfully to ${testTo}`);
       return;
     }
-    setTesting(true);
-    try {
-      const res = await sendTestSms(testTo);
-      if (res.data?.status === "sent") toast.success(`Test SMS dispatched to ${testTo}`);
-      else toast.error(res.data?.error || "Gateway reported failure");
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Could not reach SMS gateway");
-    } finally {
-      setTesting(false);
-    }
-  };
 
+    const gatewayText = String(
+      data.reason ||
+      data.gateway_response ||
+      data.error ||
+      ""
+    );
+
+    const normalized = gatewayText.toLowerCase();
+
+    if (
+      normalized.includes("exceed your account balance") ||
+      normalized.includes("insufficient balance") ||
+      normalized.includes('"error":"balance"') ||
+      normalized.includes('"error": "balance"')
+    ) {
+      toast.error("SMS failed: Insufficient InTouch SMS balance.");
+    } else if (gatewayText) {
+      toast.error(`SMS failed: ${gatewayText}`);
+    } else {
+      toast.error("SMS gateway reported failure.");
+    }
+
+  } catch (e: any) {
+    toast.error(
+      e?.response?.data?.detail ||
+      "Could not reach SMS gateway"
+    );
+  } finally {
+    setTesting(false);
+  }
+};
 
   const handleTestEmail = async () => {
     if (!testEmail) {
