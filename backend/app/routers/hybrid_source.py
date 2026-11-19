@@ -170,7 +170,7 @@ async def source_report(payload: SourceReport, db: Session = Depends(get_db)):
           local_row_count=VALUES(local_row_count), local_table_count=VALUES(local_table_count), local_table_summary_json=VALUES(local_table_summary_json), local_latest_time=VALUES(local_latest_time), sent_at=VALUES(sent_at), received_at=VALUES(received_at)
     """), {
         "foss_id": payload.foss_id, "name": center_name, "db": payload.db_name or "", "ch": payload.channel_name or "", "host": payload.hostname or "",
-        "mysql": payload.mysql_status or "unknown", "inet": payload.internet_status or "unknown", "cloud": payload.cloud_connection or "online", "vpn": payload.vpn_status or "unknown",
+        "mysql": payload.mysql_status or "unknown", "inet": payload.internet_status or "unknown", "cloud": payload.cloud_connection or "unknown", "vpn": payload.vpn_status or "unknown",
         "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage, "size": payload.database_size_mb,
         "cfg": 1 if str(payload.source_config_ok).lower() in ("1", "true", "yes") else 0, "rep_count": payload.connected_replicas, "rep_hosts": replica_hosts,
         "io": payload.io_running or "No", "sql": payload.sql_running or "No", "lag": payload.seconds_behind, "ioerr": payload.last_io_error or "", "sqlerr": payload.last_sql_error or "", "agent_version": payload.agent_version or "1.0.0",
@@ -192,7 +192,7 @@ async def source_report(payload: SourceReport, db: Session = Depends(get_db)):
                :size, :cpu, :ram, :disk, :agent_version, :agent_report, :score, :now)
         """), {"id": center_id, "name": center_name, "foss": payload.foss_id, "db": payload.db_name or payload.foss_id,
               "ch": payload.channel_name or payload.db_name or payload.foss_id, "status": status, "inet": payload.internet_status or "unknown",
-              "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "online", "seen": now, "data_ts": local_latest_dt,
+              "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "unknown", "seen": now, "data_ts": local_latest_dt,
               "size": payload.database_size_mb, "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage,
               "agent_version": payload.agent_version or "1.0.0", "agent_report": now, "score": health_score, "now": now})
         db.execute(text("""
@@ -209,7 +209,7 @@ async def source_report(payload: SourceReport, db: Session = Depends(get_db)):
                 data_size_mb=:size, cpu_usage=:cpu, ram_usage=:ram, disk_usage=:disk, agent_version=:agent_version, agent_last_report=:agent_report, health_score=:score
             WHERE id=:id
         """), {"id": center_id, "name": center_name, "db": payload.db_name or "", "ch": payload.channel_name or "", "status": status,
-              "inet": payload.internet_status or "unknown", "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "online",
+              "inet": payload.internet_status or "unknown", "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "unknown",
               "seen": now, "data_ts": local_latest_dt, "size": payload.database_size_mb, "cpu": payload.cpu_usage, "ram": payload.ram_usage,
               "disk": payload.disk_usage, "agent_version": payload.agent_version or "1.0.0", "agent_report": now, "score": health_score})
 
@@ -254,7 +254,7 @@ async def source_report(payload: SourceReport, db: Session = Depends(get_db)):
     db.execute(text("""
         INSERT INTO heartbeat_logs (id, center_id, foss_id, mysql_status, internet_status, cloud_connection, cpu_usage, ram_usage, disk_usage, received_at)
         VALUES (:id, :cid, :f, :mysql, :inet, :cloud, :cpu, :ram, :disk, :now)
-    """), {"id": str(uuid.uuid4()), "cid": center_id, "f": payload.foss_id, "mysql": payload.mysql_status or "unknown", "inet": payload.internet_status or "unknown", "cloud": payload.cloud_connection or "online", "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage, "now": now})
+    """), {"id": str(uuid.uuid4()), "cid": center_id, "f": payload.foss_id, "mysql": payload.mysql_status or "unknown", "inet": payload.internet_status or "unknown", "cloud": payload.cloud_connection or "unknown", "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage, "now": now})
 
     db.execute(text("""
         INSERT INTO replication_status (id, center_id, channel_name, source_host, io_running, sql_running, seconds_behind, last_io_error, last_sql_error, checked_at)
@@ -268,7 +268,7 @@ async def source_report(payload: SourceReport, db: Session = Depends(get_db)):
         VALUES
           (:id, :cid, :name, 'online', :inet, :mysql, :cloud, :cpu, :ram, :disk,
            :local_rows, 0, :local_latest, :cloud_latest, :cmp, :msg, :fresh, :now)
-    """), {"id": str(uuid.uuid4()), "cid": center_id, "name": center_name, "inet": payload.internet_status or "unknown", "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "online", "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage, "local_rows": payload.local_row_count, "local_latest": local_latest_dt, "cloud_latest": local_latest_dt, "cmp": "ok" if status == "online" else "warning", "msg": f"Agent report received at {now.isoformat()}", "fresh": 0, "now": now})
+    """), {"id": str(uuid.uuid4()), "cid": center_id, "name": center_name, "inet": payload.internet_status or "unknown", "mysql": payload.mysql_status or "unknown", "cloud": payload.cloud_connection or "unknown", "cpu": payload.cpu_usage, "ram": payload.ram_usage, "disk": payload.disk_usage, "local_rows": payload.local_row_count, "local_latest": local_latest_dt, "cloud_latest": local_latest_dt, "cmp": "ok" if status == "online" else "warning", "msg": f"Agent report received at {now.isoformat()}", "fresh": 0, "now": now})
 
     # 4. Alerts + timeline + AI comment
     if not _up(payload.mysql_status):
