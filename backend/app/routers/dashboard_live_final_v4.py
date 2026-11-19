@@ -59,10 +59,15 @@ def centers_live(db: Session = Depends(get_db)):
         heartbeat_age = local.get("heartbeat_age_minutes")
         heartbeat_ok = heartbeat_age is not None and int(heartbeat_age) <= 10
 
-        mysql_ok = good(local.get("mysql_status") or hc.get("mysql_status"))
-        internet_ok = good(local.get("internet_status") or hc.get("internet_status"))
-        io_ok = good(cloud.get("io_running") or local.get("io_running"))
-        sql_ok = good(cloud.get("sql_running") or local.get("sql_running"))
+        cloud_age = cloud.get("cloud_age_minutes")
+        cloud_fresh = cloud_age is not None and 0 <= int(cloud_age) <= 10
+        mysql_ok = heartbeat_ok and good(local.get("mysql_status"))
+        internet_ok = heartbeat_ok and good(local.get("internet_status"))
+        # Cloud replica state is authoritative; never infer it from a source agent.
+        io_ok = cloud_fresh and good(cloud.get("io_running"))
+        sql_ok = cloud_fresh and good(cloud.get("sql_running"))
+        io_state = ("Yes" if io_ok else "No") if cloud_fresh and cloud.get("io_running") is not None else "Unknown"
+        sql_state = ("Yes" if sql_ok else "No") if cloud_fresh and cloud.get("sql_running") is not None else "Unknown"
 
         rows_count = int(local.get("local_rows_count") or integ.get("local_rows_count") or 0)
         table_count = int(local.get("local_table_count") or integ.get("local_table_count") or 0)
@@ -96,7 +101,7 @@ def centers_live(db: Session = Depends(get_db)):
         replication_ok = io_ok and sql_ok
         online = heartbeat_ok and mysql_ok and internet_ok
 
-        if online and replication_ok:
+        if online and replication_ok and cloud_fresh:
             status = "online"
             success_rate = 100
             risk_score = 0
@@ -107,7 +112,7 @@ def centers_live(db: Session = Depends(get_db)):
             risk_score = 30
             health_score = 70
         else:
-            status = "offline"
+            status = "unreachable"
             success_rate = 0
             risk_score = 100
             health_score = 0
@@ -124,8 +129,8 @@ def centers_live(db: Session = Depends(get_db)):
             "channel_name": local.get("channel_name") or cloud.get("channel_name") or hc.get("replication_channel"),
 
             "status": status,
-            "internet_status": "online" if internet_ok else "offline",
-            "mysql_status": "online" if mysql_ok else "offline",
+            "internet_status": ("online" if internet_ok else "offline") if heartbeat_ok and local.get("internet_status") is not None else "unknown",
+            "mysql_status": ("online" if mysql_ok else "offline") if heartbeat_ok and local.get("mysql_status") is not None else "unknown",
 
             "backend_connection": "online" if heartbeat_ok else "failed",
             "cloud_connection": "online" if heartbeat_ok else "failed",
@@ -137,12 +142,12 @@ def centers_live(db: Session = Depends(get_db)):
             "heartbeat_age": int(heartbeat_age) if heartbeat_age is not None else None,
             "heartbeat_age_minutes": int(heartbeat_age) if heartbeat_age is not None else None,
 
-            "io_running": "Yes" if io_ok else "No",
-            "sql_running": "Yes" if sql_ok else "No",
-            "replica_io": "Yes" if io_ok else "No",
-            "replica_sql": "Yes" if sql_ok else "No",
-            "replication_status": "ok" if replication_ok else "partial",
-            "seconds_behind": int(cloud.get("seconds_behind") or local.get("seconds_behind") or 0),
+            "io_running": io_state,
+            "sql_running": sql_state,
+            "replica_io": io_state,
+            "replica_sql": sql_state,
+            "replication_status": ("ok" if replication_ok else "critical") if cloud_fresh else "unknown",
+            "seconds_behind": int(cloud["seconds_behind"]) if cloud_fresh and cloud.get("seconds_behind") is not None else None,
 
             "last_io_error": cloud.get("last_io_error") or local.get("last_io_error") or "",
             "last_sql_error": cloud.get("last_sql_error") or local.get("last_sql_error") or "",
@@ -175,14 +180,16 @@ def centers_live(db: Session = Depends(get_db)):
             "risk_score": risk_score,
             "health_score": health_score,
 
+            "cloud_report_fresh": cloud_fresh,
+            "cloud_report_age_minutes": int(cloud_age) if cloud_age is not None else None,
             "last_seen": str(last_seen) if last_seen else None,
             "last_data_timestamp": str(last_seen) if last_seen else None,
             "last_updated": str(cloud.get("created_at") or cloud.get("checked_at") or last_seen) if (cloud.get("created_at") or cloud.get("checked_at") or last_seen) else None,
 
             "replication": {
-                "io_running": "Yes" if io_ok else "No",
-                "sql_running": "Yes" if sql_ok else "No",
-                "seconds_behind": int(cloud.get("seconds_behind") or 0),
+                "io_running": io_state,
+                "sql_running": sql_state,
+                "seconds_behind": int(cloud["seconds_behind"]) if cloud_fresh and cloud.get("seconds_behind") is not None else None,
                 "last_io_error": cloud.get("last_io_error") or "",
                 "last_sql_error": cloud.get("last_sql_error") or "",
             },
