@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends
+"""Read-only v4 monitoring endpoints.
+
+Administrative endpoints deliberately use an independent secret until the
+application's legacy static 'dev-token' authentication is replaced. Do not
+configure this secret with the legacy dev token.
+"""
+import os
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -8,22 +17,43 @@ from app.services.monitoring_v4 import collect_once, registered_centers
 router = APIRouter(prefix="/monitoring-v4", tags=["Monitoring v4"])
 
 
+def require_monitoring_admin(
+    authorization: str | None = Header(default=None),
+) -> None:
+    """Fail closed when an independent admin token has not been configured."""
+    configured = os.environ.get("MEDISOFT_MONITORING_ADMIN_TOKEN", "")
+    if len(configured) < 32 or configured == "dev-token":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Monitoring admin access is not configured",
+        )
+    scheme, _, supplied = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(
+        supplied.encode("utf-8"), configured.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Valid monitoring administrator token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 @router.get("/health")
 def health():
     return {"ok": True, "service": "monitoring-v4"}
 
 
-@router.post("/collect-now")
+@router.post("/collect-now", dependencies=[Depends(require_monitoring_admin)])
 def collect_now():
     return collect_once()
 
 
-@router.get("/registered-centers")
+@router.get("/registered-centers", dependencies=[Depends(require_monitoring_admin)])
 def get_registered_centers(db: Session = Depends(get_db)):
     return registered_centers(db)
 
 
-@router.get("/center-complete/{foss_id}")
+@router.get("/center-complete/{foss_id}", dependencies=[Depends(require_monitoring_admin)])
 def center_complete(foss_id: str, db: Session = Depends(get_db)):
     hc = db.execute(text("SELECT * FROM health_centers WHERE foss_id=:f LIMIT 1"), {"f": foss_id}).mappings().first()
     local = db.execute(text("SELECT * FROM source_agent_reports WHERE foss_id=:f ORDER BY id DESC LIMIT 1"), {"f": foss_id}).mappings().first()
