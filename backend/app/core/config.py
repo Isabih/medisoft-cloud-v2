@@ -17,7 +17,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8080",
         "http://100.115.244.88",
     ]
-    auto_create_tables: bool = True
+    auto_create_tables: bool = False
+    enable_background_collectors: bool = False
+    allow_runtime_schema_migrations: bool = False
 
     mysql_source_host: str = "127.0.0.1"
     mysql_source_user: str = "medisoft_app"
