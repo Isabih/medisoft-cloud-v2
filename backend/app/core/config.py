@@ -1,7 +1,8 @@
-from typing import List
+import json
+from typing import List, Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, NoDecode
 
 
 class Settings(BaseSettings):
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     backend_host: str = "127.0.0.1"
     backend_port: int = 8004
-    cors_origins: List[str] = [
+    cors_origins: Annotated[List[str], NoDecode] = [
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         "http://100.115.244.88",
@@ -35,6 +36,11 @@ class Settings(BaseSettings):
             value = value.strip()
             if not value:
                 return []
+            if value.startswith("["):
+                parsed = json.loads(value)
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS must be a list")
+                return [str(item).strip() for item in parsed if str(item).strip()]
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
