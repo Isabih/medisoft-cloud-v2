@@ -95,10 +95,10 @@ def ensure_retention_schema(db):
 
 
 def get_retention_settings(db):
-    ensure_retention_schema(db)
+    # Read-only configuration lookup: never run DDL from a scheduler tick.
     detailed = DEFAULT_DETAILED_DAYS
     incident = DEFAULT_INCIDENT_DAYS
-    enabled = True
+    enabled = False
     try:
         row = db.execute(text("""
             SELECT detailed_retention_days, incident_history_retention_days, enable_retention_cleanup
@@ -109,7 +109,8 @@ def get_retention_settings(db):
             incident = int(row.get("incident_history_retention_days") or DEFAULT_INCIDENT_DAYS)
             enabled = bool(row.get("enable_retention_cleanup"))
     except Exception:
-        logger.exception("Could not read retention settings; using defaults")
+        db.rollback()
+        logger.warning("Retention settings unavailable; cleanup disabled until schema is ready: %s", "settings lookup failed")
     return max(1, detailed), max(30, incident), enabled
 
 
@@ -390,6 +391,10 @@ def start_retention_scheduler():
             pass
     finally:
         db.close()
+
+    if not enabled:
+        logger.warning("Retention cleanup disabled; scheduler not started")
+        return None
 
     sched = BackgroundScheduler(timezone="UTC")
     sched.add_job(purge_old_monitoring_data, "cron", hour=hour, minute=0,
