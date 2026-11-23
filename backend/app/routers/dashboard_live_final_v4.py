@@ -140,7 +140,7 @@ def centers_live(db: Session = Depends(get_db)):
 
             "status": status,
             "io_diagnostics": ({
-                **safe_json(incident["diagnosis_json"], {}),
+                **{k: v for k, v in safe_json(incident["diagnosis_json"], {}).items() if k in ("io_state", "cause_code", "confidence", "reason", "suggested_solution", "checks", "mysql_error_number", "checked_at")},
                 "incident_state": incident["state"],
                 "incident_opened_at": str(incident["opened_at"]) if incident["opened_at"] else None,
                 "recovery_emailed_at": str(incident["recovery_emailed_at"]) if incident["recovery_emailed_at"] else None,
