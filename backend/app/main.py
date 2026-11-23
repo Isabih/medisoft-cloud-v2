@@ -68,8 +68,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if settings.auto_create_tables:
+if settings.auto_create_tables and settings.allow_runtime_schema_migrations:
     Base.metadata.create_all(bind=engine)
+elif settings.auto_create_tables:
+    raise RuntimeError("AUTO_CREATE_TABLES requires explicit ALLOW_RUNTIME_SCHEMA_MIGRATIONS=true")
 else:
     logger.info("AUTO_CREATE_TABLES disabled; expecting schema to be created via migrations.")
 
@@ -123,6 +125,9 @@ app.include_router(monitoring_v4.router, prefix=settings.api_v1_prefix)
 
 @app.on_event("startup")
 def _start_background():
+    if not settings.enable_background_collectors:
+        logger.info("Background collectors disabled (ENABLE_BACKGROUND_COLLECTORS=false).")
+        return
     try:
         start_alert_engine()
     except Exception as exc:
