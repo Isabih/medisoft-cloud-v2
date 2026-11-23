@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.services.io_diagnostics_v4 import record_diagnosis
 
 logger = logging.getLogger(__name__)
 _started = False
@@ -260,13 +261,13 @@ def replica_status(db: Session, channel: str) -> dict:
     try:
         row = db.execute(text(f"SHOW REPLICA STATUS FOR CHANNEL '{channel}'")).mappings().first()
     except Exception as exc:
-        return {"io_running": "No", "sql_running": "No", "seconds_behind": None, "last_io_error": str(exc), "last_sql_error": "", "source_host": None, "source_log_file": None, "read_source_log_pos": None, "relay_log_file": None, "relay_log_pos": None, "raw": {}}
+        return {"io_running": "Unknown", "sql_running": "Unknown", "seconds_behind": None, "last_io_error": str(exc), "last_sql_error": "", "source_host": None, "source_log_file": None, "read_source_log_pos": None, "relay_log_file": None, "relay_log_pos": None, "raw": {}}
     if not row:
         return {"io_running": "No", "sql_running": "No", "seconds_behind": None, "last_io_error": "No replica status row found", "last_sql_error": "", "source_host": None, "source_log_file": None, "read_source_log_pos": None, "relay_log_file": None, "relay_log_pos": None, "raw": {}}
     d = dict(row)
     return {
-        "io_running": _value(d, "Replica_IO_Running", "Slave_IO_Running", default="No"),
-        "sql_running": _value(d, "Replica_SQL_Running", "Slave_SQL_Running", default="No"),
+        "io_running": _value(d, "Replica_IO_Running", "Slave_IO_Running", default="Unknown"),
+        "sql_running": _value(d, "Replica_SQL_Running", "Slave_SQL_Running", default="Unknown"),
         "seconds_behind": _value(d, "Seconds_Behind_Source", "Seconds_Behind_Master"),
         "last_io_error": _value(d, "Last_IO_Error", default="") or "",
         "last_sql_error": _value(d, "Last_SQL_Error", default="") or "",
@@ -400,7 +401,7 @@ def store_result(db: Session, center: dict, local: Optional[dict], repl: dict, s
     """), {
         "foss_id": center["foss_id"], "health_center_id": center["id"], "health_center_name": center["name"],
         "db_name": center["database_name"], "channel_name": center["replication_channel"],
-        "source_host": repl.get("source_host"), "io_running": repl.get("io_running") or "No", "sql_running": repl.get("sql_running") or "No",
+        "source_host": repl.get("source_host"), "io_running": repl.get("io_running") or "Unknown", "sql_running": repl.get("sql_running") or "Unknown",
         "seconds_behind": repl.get("seconds_behind"), "last_io_error": repl.get("last_io_error") or "", "last_sql_error": repl.get("last_sql_error") or "",
         "cloud_database_size_mb": stats.get("cloud_database_size_mb") or 0, "cloud_table_count": stats.get("cloud_table_count") or 0,
         "cloud_rows_count": stats.get("cloud_rows_count") or 0, "cloud_latest_time": stats.get("cloud_latest_time"),
@@ -495,6 +496,7 @@ def collect_once() -> dict:
                 stats = db_stats(db, center["database_name"])
                 integ = compare(local, stats)
                 results.append(store_result(db, center, local, repl, stats, integ))
+                record_diagnosis(db, center, repl, local)
                 db.commit()
             except Exception as exc:
                 logger.exception("Monitoring v4 failed for %s: %s", center.get("foss_id"), exc)
