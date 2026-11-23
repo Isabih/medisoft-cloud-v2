@@ -1,64 +1,65 @@
-"""Prepare and test the Medisoft v4 central registry schema.
+"""Preview or apply the three Medisoft v4 registry tables.
 
-Preview (no database connection or writes):
-    python -m scripts.migrate_central_registry
+Default: preview SQL only, no database connection.
+--apply-test: apply only to medisoft_v4_test.
+--apply-cloud: apply only to central_monitoring.
 
-Apply only to a disposable, isolated MySQL test database:
-    DATABASE_URL=mysql+pymysql://.../medisoft_v4_test python -m scripts.migrate_central_registry --apply-test
-
-Cloud development application is supported only with --apply-cloud and an exact\ncentral_monitoring database match. No other schemas are targeted.
+No clinic schema, replication channel, or existing table is altered.
+MySQL DDL is nontransactional: confirm backups before applying.
 """
 import argparse
 
 from sqlalchemy import inspect, text
-from sqlalchemy.schema import CreateTable, CreateIndex
 from sqlalchemy.dialects import mysql
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.core.database import Base, engine
 from app.models.health_center import HealthCenter, MonitoredDatabase
 from app.models.settings import Setting
 
 TABLES = [HealthCenter.__table__, MonitoredDatabase.__table__, Setting.__table__]
-TEST_DATABASE = "medisoft_v4_test"\nCLOUD_DATABASE = "central_monitoring"
+TEST_DATABASE = "medisoft_v4_test"
+CLOUD_DATABASE = "central_monitoring"
 
 
 def preview():
     dialect = mysql.dialect()
     print("-- PREVIEW ONLY: no database connection, no DDL executed")
-    print("-- Target tables: health_centers, monitored_databases, settings")
     for table in TABLES:
         print(str(CreateTable(table).compile(dialect=dialect)).strip() + ";")
         for index in table.indexes:
             print(str(CreateIndex(index).compile(dialect=dialect)).strip() + ";")
-    print("-- Test initialization: INSERT settings id=1 with retention cleanup disabled")
+    print("-- Settings row id=1 will disable retention cleanup.")
 
 
-def apply_test():
-    database = engine.url.database
-    if database != TEST_DATABASE:
-        raise SystemExit(
-            "Refusing schema changes: --apply-test requires database name "
-            f"{TEST_DATABASE!r}; configured database is {database!r}."
-        )
+def apply(target_database):
     if engine.dialect.name != "mysql":
-        raise SystemExit("This migration requires MySQL.")
+        raise SystemExit("Refusing schema changes: MySQL is required.")
+    configured = engine.url.database
+    if configured != target_database:
+        raise SystemExit(
+            f"Refusing schema changes: configured database {configured!r} "
+            f"does not match required database {target_database!r}."
+        )
 
     with engine.connect() as connection:
         selected = connection.execute(text("SELECT DATABASE()")).scalar()
         if selected != target_database:
-            raise SystemExit(f"Unexpected active database: {selected!r}")
+            raise SystemExit(f"Refusing schema changes: active database {selected!r}.")
         existing = set(inspect(connection).get_table_names())
-        conflicts = existing.intersection(t.name for t in TABLES)
+        conflicts = sorted(existing.intersection(table.name for table in TABLES))
         if conflicts:
             raise SystemExit(
-                "Refusing to modify existing registry tables: "
-                + ", ".join(sorted(conflicts))
+                "Refusing to modify existing registry tables: " + ", ".join(conflicts)
             )
 
-    # Deliberately limited to these three tables, not Base.metadata.create_all().
-    # MySQL DDL is not transactional; verify backups and target before applying.
+    # Only these three registry tables; never Base.metadata.create_all() globally.
+    # MySQL DDL may persist after an error; check schema before retrying.
     Base.metadata.create_all(bind=engine, tables=TABLES, checkfirst=True)
     with engine.begin() as connection:
+        selected = connection.execute(text("SELECT DATABASE()")).scalar()
+        if selected != target_database:
+            raise RuntimeError("Database changed before settings initialization")
         connection.execute(text("""
             INSERT INTO settings (
                 id, day_close_time, auto_generate_reports, polling_interval,
@@ -69,18 +70,19 @@ def apply_test():
                 1, '00:00:00', 1, 30, 120, '07:00:00', 7, 365, 2, 0
             )
         """))
-    print("Created three registry tables in database:", target_database)
-    print("Seeded settings id=1; retention cleanup is disabled.")
+    print(f"Created three registry tables in {target_database}.")
+    print("Initialized settings id=1 with retention cleanup disabled.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--apply-test", action="store_true",
-        help="Create tables only in the isolated medisoft_v4_test database",
-    )
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--apply-test", action="store_true")
+    modes.add_argument("--apply-cloud", action="store_true")
     args = parser.parse_args()
     if args.apply_test:
-        apply_test()
+        apply(TEST_DATABASE)
+    elif args.apply_cloud:
+        apply(CLOUD_DATABASE)
     else:
         preview()
