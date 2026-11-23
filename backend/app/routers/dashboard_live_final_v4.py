@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -21,6 +22,8 @@ def safe_json(v, default):
 def centers_live(db: Session = Depends(get_db)):
     centers = db.execute(text("SELECT * FROM health_centers ORDER BY name")).mappings().all()
     rows = []
+    # Cloud clock sampled once per request; agent timestamps are historical reports.
+    clock_row = db.execute(text("SELECT UTC_TIMESTAMP() AS cloud_utc, NOW() AS cloud_local, @@session.time_zone AS mysql_timezone")).mappings().first()
 
     for hc in centers:
         hc = dict(hc)
@@ -129,7 +132,56 @@ def centers_live(db: Session = Depends(get_db)):
 
         last_seen = local.get("created_at") or local.get("sent_at") or hc.get("last_seen")
 
+        # Schema inspection equivalent to SHOW COLUMNS/INDEX, using metadata only.
+        # Never scan the entire database or assume an orders primary key.
+        schema_name = hc.get("database_name")
+        order_columns, order_indexes = [], []
+        if schema_name:
+            order_columns = [dict(x) for x in db.execute(text("""
+                SELECT COLUMN_NAME AS name, DATA_TYPE AS type, IS_NULLABLE AS nullable,
+                       COLUMN_KEY AS column_key
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA=:schema AND TABLE_NAME='orders'
+                ORDER BY ORDINAL_POSITION
+            """), {"schema": schema_name}).mappings().all()]
+            order_indexes = [dict(x) for x in db.execute(text("""
+                SELECT INDEX_NAME AS name, COLUMN_NAME AS column_name,
+                       SEQ_IN_INDEX AS position, NON_UNIQUE AS non_unique
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA=:schema AND TABLE_NAME='orders'
+                ORDER BY INDEX_NAME, SEQ_IN_INDEX
+            """), {"schema": schema_name}).mappings().all()]
+        # sent_at is reported by the local agent; it is NOT an independently
+        # verified local server clock. Do not infer clock skew from it alone.
+        agent_sent_at = local.get("sent_at")
+        orders_diagnosis = {
+            "schema_exists": bool(order_columns),
+            "columns": order_columns,
+            "indexes": order_indexes,
+            "cloud_time_utc": str(clock_row["cloud_utc"]) if clock_row else None,
+            "cloud_time_local": str(clock_row["cloud_local"]) if clock_row else None,
+            "cloud_mysql_timezone": str(clock_row["mysql_timezone"]) if clock_row else None,
+            "local_agent_reported_time": str(agent_sent_at) if agent_sent_at else None,
+            "local_agent_received_at": str(local.get("received_at")) if local.get("received_at") else None,
+            "local_clock_skew_seconds": None,
+            "local_clock_status": "unverified",
+            "orders_local_count": None,
+            "orders_cloud_count": None,
+            "orders_difference": None,
+            "comparison_status": "awaiting_checkpointed_orders_metrics",
+            "comparison_reason": "Local agent does not yet provide a verified orders-only count at a shared replication checkpoint.",
+            "replication_lag_seconds": int(cloud["seconds_behind"]) if cloud_fresh and cloud.get("seconds_behind") is not None else None,
+            "lag_reason": (
+                "Cloud replica IO is not running; inspect IO diagnostics." if cloud_fresh and not io_ok else
+                "Cloud replica SQL is not running; inspect Last_SQL_Error." if cloud_fresh and not sql_ok else
+                "Replica reports delay, but source cause is not established." if cloud_fresh and cloud.get("seconds_behind") not in (None, 0) else
+                "No current lag evidence." if cloud_fresh else
+                "Cloud replica report is missing or stale; lag cannot be determined."
+            ),
+        }
+
         item = {
+            "orders_diagnostics": orders_diagnosis,
             **hc,
             "foss_id": foss_id,
             "name": hc.get("name"),
