@@ -47,13 +47,10 @@ def main():
     confirmation = getpass.getpass("Confirm password (hidden): ")
     if password != confirmation:
         raise SystemExit("Passwords do not match; no account created.")
-    if len(password) < 14 or len(password.encode("utf-8")) > 72:
-        raise SystemExit("Use 14-72 UTF-8 bytes with at least 14 characters.")
-    if username.lower() in password.lower() or not all(
-        [re.search(r"[A-Z]", password), re.search(r"[a-z]", password),
-         re.search(r"[0-9]", password), re.search(r"[^A-Za-z0-9]", password)]
-    ):
-        raise SystemExit("Password needs upper/lowercase, a number, a symbol, and must not contain username.")
+    if len(password) < 8 or len(password.encode("utf-8")) > 72:
+        raise SystemExit("Password must be at least 8 characters and at most 72 UTF-8 bytes.")
+    if password.strip() != password or not password.strip():
+        raise SystemExit("Password cannot start or end with spaces.")
 
     with engine.begin() as conn:
         if conn.execute(text("SELECT DATABASE()")).scalar() != EXPECTED_DB:
