@@ -44,6 +44,16 @@ def centers_live(db: Session = Depends(get_db)):
             LIMIT 1
         """), {"foss_id": foss_id}).mappings().first()
 
+        # Dedicated incident metadata: never infer root cause from a red status card.
+        try:
+            incident = db.execute(text("""
+                SELECT state, diagnosis_json, opened_at, last_checked, recovery_emailed_at
+                FROM replication_io_incidents WHERE foss_id=:foss_id
+            """), {"foss_id": foss_id}).mappings().first()
+        except Exception:
+            db.rollback()
+            incident = None
+
         integ = db.execute(text("""
             SELECT *
             FROM database_integrity_snapshots
@@ -129,6 +139,12 @@ def centers_live(db: Session = Depends(get_db)):
             "channel_name": local.get("channel_name") or cloud.get("channel_name") or hc.get("replication_channel"),
 
             "status": status,
+            "io_diagnostics": ({
+                **safe_json(incident["diagnosis_json"], {}),
+                "incident_state": incident["state"],
+                "incident_opened_at": str(incident["opened_at"]) if incident["opened_at"] else None,
+                "recovery_emailed_at": str(incident["recovery_emailed_at"]) if incident["recovery_emailed_at"] else None,
+            } if incident else None),
             "internet_status": ("online" if internet_ok else "offline") if heartbeat_ok and local.get("internet_status") is not None else "unknown",
             "mysql_status": ("online" if mysql_ok else "offline") if heartbeat_ok and local.get("mysql_status") is not None else "unknown",
 
