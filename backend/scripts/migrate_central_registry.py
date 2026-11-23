@@ -6,7 +6,7 @@ Preview (no database connection or writes):
 Apply only to a disposable, isolated MySQL test database:
     DATABASE_URL=mysql+pymysql://.../medisoft_v4_test python -m scripts.migrate_central_registry --apply-test
 
-Production application is intentionally unsupported by this command.
+Cloud development application is supported only with --apply-cloud and an exact\ncentral_monitoring database match. No other schemas are targeted.
 """
 import argparse
 
@@ -19,7 +19,7 @@ from app.models.health_center import HealthCenter, MonitoredDatabase
 from app.models.settings import Setting
 
 TABLES = [HealthCenter.__table__, MonitoredDatabase.__table__, Setting.__table__]
-TEST_DATABASE = "medisoft_v4_test"
+TEST_DATABASE = "medisoft_v4_test"\nCLOUD_DATABASE = "central_monitoring"
 
 
 def preview():
@@ -45,7 +45,7 @@ def apply_test():
 
     with engine.connect() as connection:
         selected = connection.execute(text("SELECT DATABASE()")).scalar()
-        if selected != TEST_DATABASE:
+        if selected != target_database:
             raise SystemExit(f"Unexpected active database: {selected!r}")
         existing = set(inspect(connection).get_table_names())
         conflicts = existing.intersection(t.name for t in TABLES)
@@ -56,7 +56,7 @@ def apply_test():
             )
 
     # Deliberately limited to these three tables, not Base.metadata.create_all().
-    # MySQL DDL is not transactional; use only a disposable test database.
+    # MySQL DDL is not transactional; verify backups and target before applying.
     Base.metadata.create_all(bind=engine, tables=TABLES, checkfirst=True)
     with engine.begin() as connection:
         connection.execute(text("""
@@ -69,7 +69,7 @@ def apply_test():
                 1, '00:00:00', 1, 30, 120, '07:00:00', 7, 365, 2, 0
             )
         """))
-    print("Created three registry tables in isolated test database:", TEST_DATABASE)
+    print("Created three registry tables in database:", target_database)
     print("Seeded settings id=1; retention cleanup is disabled.")
 
 
