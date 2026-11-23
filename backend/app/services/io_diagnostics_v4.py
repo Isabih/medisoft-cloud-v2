@@ -220,21 +220,21 @@ def record_diagnosis(db, center, repl, local=None):
     healthy = diagnosis["io_state"] == "online" and bool(raw)
     if not existing:
         # Baseline healthy states are not incidents and do not trigger emails.
-        state = "healthy" if healthy else "active"
+        state = "healthy" if healthy else "unknown" if diagnosis["io_state"] == "unknown" else "active"
         db.execute(text("""
             INSERT INTO replication_io_incidents
             (foss_id, state, diagnosis_json, opened_at, last_checked, healthy_streak)
             VALUES (:f,:s,:d,:o,:n,:h)
         """), {"f": foss_id, "s": state, "d": json.dumps(diagnosis),
-                "o": None if healthy else now, "n": now, "h": 1 if healthy else 0})
+                "o": now if state == "active" else None, "n": now, "h": 1 if healthy else 0})
         return diagnosis
     streak = int(existing["healthy_streak"] or 0) + 1 if healthy else 0
-    state = "healthy" if healthy and streak >= 2 else "recovering" if healthy else "active"
+    state = "healthy" if healthy and streak >= 2 else "recovering" if healthy and existing["state"] in ("active", "recovering") else "healthy" if healthy else "unknown" if diagnosis["io_state"] == "unknown" else "active"
     pending = bool(existing["recovery_pending"])
     opened_at = existing["opened_at"]
     if state == "healthy" and existing["state"] in ("active", "recovering"):
         pending = bool(opened_at)
-    if not healthy and existing["state"] == "healthy":
+    if state == "active" and existing["state"] != "active":
         opened_at = now
         pending = False
     db.execute(text("""
