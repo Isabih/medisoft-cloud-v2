@@ -486,7 +486,7 @@ def store_result(db: Session, center: dict, local: Optional[dict], repl: dict, s
 def collect_once() -> dict:
     db = SessionLocal()
     try:
-        migrate_monitoring_v4(db)
+        # Schema changes belong to reviewed migrations, never collector ticks.
         centers = registered_centers(db)
         results = []
         for center in centers:
