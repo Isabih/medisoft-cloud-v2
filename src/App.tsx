@@ -24,6 +24,8 @@ import OperationsCenter from "./pages/OperationsCenter";
 import NotFound from "./pages/NotFound";
 
 const queryClient = createAppQueryClient();
+// Vite serves local development at /; deployed Medisoft remains under /v3.
+const routerBasename = import.meta.env.DEV ? "/" : "/v3";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,7 +33,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter basename="/v3">
+        <BrowserRouter basename={routerBasename}>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
