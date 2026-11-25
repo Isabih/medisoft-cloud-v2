@@ -16,6 +16,9 @@ SYSTEM_DATABASES = {
     "performance_schema",
     "sys",
     "central_monitoring",
+    "hearts360_v2",
+    "medisoft_demo",
+    "medisoft_monitoring",
 }
 
 
@@ -57,8 +60,16 @@ def read_address_prefill(db: Session, schema: str) -> dict:
     # Only called for schema names returned by the connected server.
     quoted = "`" + schema.replace("`", "``") + "`"
     try:
+        columns = set(db.execute(text("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = 'address'
+        """), {"schema": schema}).scalars())
+        if not {"address_id", "district", "hc", "fosaid"} <= columns:
+            result["prefill_status"] = "unavailable"
+            return result
+        province_expr = "`province`" if "province" in columns else "NULL"
         row = db.execute(text(f"""
-            SELECT province, district, hc, fosaid
+            SELECT {province_expr} AS province, district, hc, fosaid
             FROM {quoted}.address
             ORDER BY address_id ASC LIMIT 1
         """)).mappings().first()
@@ -66,7 +77,7 @@ def read_address_prefill(db: Session, schema: str) -> dict:
             for key, column in (("health_center_name", "hc"), ("province", "province"),
                                 ("district", "district"), ("foss_id", "fosaid")):
                 result[key] = str(row[column]) if row[column] is not None else ""
-        result["prefill_status"] = "available" if row else "empty"
+        result["prefill_status"] = ("available" if "province" in columns else "partial") if row else "empty"
     except Exception as exc:
         logger.warning("Address prefill unavailable for %s (%s)", schema, type(exc).__name__)
         result["prefill_status"] = "unavailable"
@@ -95,7 +106,7 @@ def available_databases(db: Session = Depends(get_db)):
             matches.setdefault(schema, []).append(row)
     results = []
     for schema in schemas:
-        if schema in registered:
+        if schema in registered or schema in registered_channels:
             continue
         candidates = matches.get(schema, [])
         row = candidates[0] if len(candidates) == 1 else {}
