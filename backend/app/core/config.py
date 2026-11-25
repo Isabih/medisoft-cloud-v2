@@ -25,6 +25,28 @@ class Settings(BaseSettings):
     mysql_source_user: str = "medisoft_app"
     mysql_source_password: str = "raymond1"
 
+    # Existing receiver storage; jobs remain opt-in until verified.
+    backup_root: str = "/srv/health-center-manual-dump"
+    hourly_backup_dir: str = "/srv/health-center-manual-dump"
+    nightly_backup_dir: str = "/srv/health-center-manual-dump/nightly"
+    export_dir: str = "/srv/health-center-manual-dump/exports"
+    backup_metadata_dir: str = "/srv/health-center-manual-dump/metadata"
+    cloud_status_file: str = "/opt/monitoring/cloud_status.json"
+    hourly_backup_interval_minutes: int = 60
+    hourly_backup_retention_count: int = 1
+    nightly_backup_retention_count: int = 1
+    export_expiry_minutes: int = 60
+    export_delete_after_download: bool = True
+    backup_compression: str = "zstd"
+    backup_verify_checksum: bool = True
+    report_timezone: str = "Africa/Kigali"
+    nightly_backup_time: str = "00:00"
+    daily_report_time: str = "01:00"
+    enable_nightly_backups: bool = False
+    enable_database_exports: bool = False
+    enable_export_cleanup: bool = False
+    enable_daily_email_report: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
