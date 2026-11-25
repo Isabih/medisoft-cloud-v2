@@ -120,7 +120,7 @@ const RegisterHealthCenter = () => {
           return haystacks.some((value) => (value || "").toLowerCase().includes(q));
         });
 
-    return rows.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+    return [...rows].sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || a.schema_name.localeCompare(b.schema_name));
   }, [availableDatabases, search, showAllDatabases]);
 
   const selectedDatabaseDetails = useMemo(
@@ -182,7 +182,7 @@ const RegisterHealthCenter = () => {
   const getMatchLabel = (score?: number) => {
     if ((score || 0) >= 100) return "Excellent match";
     if ((score || 0) >= 90) return "Strong match";
-    return "Possible match";
+    return "Mapping not verified";
   };
 
   const getMatchReason = (db?: UnregisteredDatabase | null) => {
@@ -204,7 +204,7 @@ const RegisterHealthCenter = () => {
     if (score >= 90) {
       return "Most key details match, but there are small differences such as abbreviations, suffixes, or naming style.";
     }
-    return "Some details are similar, but the match is weaker and should be reviewed carefully before registration.";
+    return "No verified channel mapping. Confirm the correct channel manually.";
   };
 
   const getInputClass = (
@@ -453,7 +453,7 @@ const RegisterHealthCenter = () => {
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => setShowAllDatabases(true)}
+                  onClick={() => { handleClearSelection(); setSearch(""); setShowAllDatabases(true); void loadAvailableDatabases(); }}
                   disabled={loadingDatabases}
                 >
                   Show all databases
@@ -530,12 +530,12 @@ const RegisterHealthCenter = () => {
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             <span className="inline-flex items-center gap-1">
                               <MapPin className="h-3 w-3" />
-                              {db.province || "—"} / {db.district || "—"}
+                              {db.province || "—"} / {db.district || "—"} · FOSA: {db.foss_id || "Unknown"}
                             </span>
 
                             <span className="inline-flex items-center gap-1">
                               <Network className="h-3 w-3" />
-                              {db.source_host || "No host"}
+                              {db.source_host || "No host"}:{db.source_port || 3306}
                             </span>
 
                             <span className="inline-flex items-center gap-1">
