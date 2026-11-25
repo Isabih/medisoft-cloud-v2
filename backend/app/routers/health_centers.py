@@ -375,7 +375,7 @@ def list_health_centers(db: Session = Depends(get_db)):
         }
 
         backup = db.execute(text("""
-            SELECT status, backup_date, file_size_mb, duration_seconds, created_at
+            SELECT status, date AS backup_date, file_size_mb, duration_seconds, created_at
             FROM backups
             WHERE center_id = :center_id
             ORDER BY created_at DESC
