@@ -1,4 +1,3 @@
-import re
 import pymysql
 
 from fastapi import APIRouter, Depends
@@ -19,64 +18,37 @@ SYSTEM_DATABASES = {
 }
 
 
-def normalize_name(value: str) -> str:
-    value = (value or "").strip().lower()
-
-    patterns = [
-        r"_new\d*$",
-        r"_\d+$",
-        r"_cit$",
-        r"_sake_\d+$",
-    ]
-
-    changed = True
-    while changed:
-        changed = False
-        for pattern in patterns:
-            new_value = re.sub(pattern, "", value)
-            if new_value != value:
-                value = new_value
-                changed = True
-
-    return value.strip("_")
-
-
-def schema_match_score(channel: str, schema: str) -> int:
-    channel_raw = (channel or "").strip().lower()
-    schema_raw = (schema or "").strip().lower()
-
-    channel_norm = normalize_name(channel_raw)
-    schema_norm = normalize_name(schema_raw)
-
-    if schema_raw == channel_raw:
-        return 100
-
-    if schema_norm == channel_norm:
-        return 90
-
-    if schema_raw.startswith(channel_raw + "_"):
-        return 80
-
-    if schema_norm.startswith(channel_norm):
-        return 70
-
-    if channel_norm and channel_norm in schema_norm:
-        return 60
-
-    return 0
-
-
 def best_schema_for_channel(channel: str, schemas: list[str]) -> tuple[str, int]:
-    best_schema = ""
-    best_score = 0
+    if not channel:
+        return "", 0
+    candidates = [s for s in schemas if s == channel or s == channel + "_new"]
+    return (candidates[0], 100) if len(candidates) == 1 else ("", 0)
 
-    for schema in schemas:
-        score = schema_match_score(channel, schema)
-        if score > best_score:
-            best_schema = schema
-            best_score = score
 
-    return best_schema, best_score
+@router.get("/channels")
+def replication_channels(db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT c.CHANNEL_NAME AS replication_channel,
+               c.HOST AS source_host, c.PORT AS source_port,
+               cs.SERVICE_STATE AS io_thread,
+               ap.SERVICE_STATE AS sql_thread,
+               cs.LAST_ERROR_NUMBER AS io_error_number,
+               COALESCE(w.LAST_ERROR_NUMBER, 0) AS sql_error_number
+        FROM performance_schema.replication_connection_configuration c
+        LEFT JOIN performance_schema.replication_connection_status cs USING (CHANNEL_NAME)
+        LEFT JOIN performance_schema.replication_applier_status ap USING (CHANNEL_NAME)
+        LEFT JOIN (
+            SELECT CHANNEL_NAME, LAST_ERROR_NUMBER,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY CHANNEL_NAME
+                       ORDER BY LAST_ERROR_TIMESTAMP DESC, WORKER_ID
+                   ) AS rn
+            FROM performance_schema.replication_applier_status_by_worker
+            WHERE LAST_ERROR_NUMBER <> 0
+        ) w ON w.CHANNEL_NAME = c.CHANNEL_NAME AND w.rn = 1
+        ORDER BY c.CHANNEL_NAME
+    """)).mappings().all()
+    return [dict(row) for row in rows]
 
 
 def read_address_prefill(database_name: str) -> dict:
@@ -181,7 +153,7 @@ def available_databases(db: Session = Depends(get_db)):
 
         used_schemas.add(matched_schema.lower())
 
-        address_info = read_address_prefill(matched_schema)
+        address_info = {}  # Facility identity requires separate authorized verification.
 
         results.append({
             "schema_name": matched_schema,
@@ -194,6 +166,7 @@ def available_databases(db: Session = Depends(get_db)):
             "source_port": source_port,
             "io_thread": io_thread,
             "sql_thread": sql_thread,
+            "schema_visible": score > 0,
             "match_score": score,
             "match_type": (
                 "exact" if score >= 90
@@ -209,7 +182,7 @@ def available_databases(db: Session = Depends(get_db)):
     ]
 
     for schema in unmatched_local_schemas:
-        address_info = read_address_prefill(schema)
+        address_info = {}
 
         results.append({
             "schema_name": schema,
