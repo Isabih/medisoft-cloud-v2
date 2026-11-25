@@ -55,12 +55,13 @@ def replication_channels(db: Session = Depends(get_db)):
     return [dict(row) for row in rows]
 
 
-def read_address_prefill(db: Session, schema: str) -> dict:
+def read_address_prefill(db: Session, schema: str, columns: set[str] | None = None) -> dict:
     result = dict(health_center_name="", province="", district="", foss_id="")
     # Only called for schema names returned by the connected server.
     quoted = "`" + schema.replace("`", "``") + "`"
     try:
-        columns = set(db.execute(text("""
+        if columns is None:
+            columns = set(db.execute(text("""
             SELECT COLUMN_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = 'address'
         """), {"schema": schema}).scalars())
@@ -104,6 +105,45 @@ def available_databases(db: Session = Depends(get_db)):
         schema, score = best_schema_for_channel(channel, schemas)
         if schema and channel not in registered_channels:
             matches.setdefault(schema, []).append(row)
+    eligible = [s for s in schemas if s not in registered and s not in registered_channels]
+    metadata = {}
+    for schema, column in db.execute(text("""
+        SELECT TABLE_SCHEMA, COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_NAME = 'address'
+          AND COLUMN_NAME IN ('address_id', 'district', 'hc', 'fosaid', 'province')
+    """)):
+        if schema in eligible:
+            metadata.setdefault(schema, set()).add(column)
+    prefills = {}
+    for offset in range(0, len(eligible), 20):
+        batch = eligible[offset:offset + 20]
+        queries, params = [], {}
+        for i, schema in enumerate(batch):
+            columns = metadata.get(schema, set())
+            if not {"address_id", "district", "hc", "fosaid"} <= columns:
+                continue
+            quoted = "`" + schema.replace("`", "``") + "`"
+            province = "`province`" if "province" in columns else "NULL"
+            params[f"s{i}"] = schema
+            queries.append(f"(SELECT :s{i} AS schema_name, {province} AS province, district, hc, fosaid FROM {quoted}.address ORDER BY address_id ASC LIMIT 1)")
+        if not queries:
+            continue
+        try:
+            for row in db.execute(text(" UNION ALL ".join(queries)), params).mappings():
+                schema = row["schema_name"]
+                prefills[schema] = {
+                    key: str(row[col]) if row[col] is not None else ""
+                    for key, col in (("health_center_name", "hc"), ("province", "province"),
+                                     ("district", "district"), ("foss_id", "fosaid"))
+                }
+                prefills[schema]["prefill_status"] = "available" if "province" in metadata[schema] else "partial"
+            for schema in params.values():
+                if schema not in prefills:
+                    prefills[schema] = dict(health_center_name="", province="", district="", foss_id="", prefill_status="empty")
+        except Exception as exc:
+            logger.warning("Address batch fallback (%s)", type(exc).__name__)
+            for schema in params.values():
+                prefills[schema] = read_address_prefill(db, schema, metadata[schema])
     results = []
     for schema in schemas:
         if schema in registered or schema in registered_channels:
@@ -112,7 +152,7 @@ def available_databases(db: Session = Depends(get_db)):
         row = candidates[0] if len(candidates) == 1 else {}
         results.append({
             "schema_name": schema,
-            **read_address_prefill(db, schema),
+            **(prefills[schema] if schema in prefills else dict(health_center_name="", province="", district="", foss_id="", prefill_status="unavailable")),
             "replication_channel": row.get("replication_channel", ""),
             "source_host": row.get("source_host", ""),
             "source_port": row.get("source_port") or 3306,
